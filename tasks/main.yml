@@ -1,0 +1,84 @@
+---
+# tasks file for master
+- name: installing docker
+  package:
+    name: docker
+    state: present
+
+- name: configuring yum repo for k8s
+  yum_repository:
+    name: kubernetes
+    description: 'Kubernetes'
+    baseurl: https://packages.cloud.google.com/yum/repos/kubernetes-el7-\$basearch
+    enabled: yes
+    gpgcheck: yes
+    repo_gpgcheck: yes
+    gpgkey: https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+    exclude:
+     - kubelet
+     - kubeadm
+     - kubectl
+
+- name: installing kubeadm
+  yum:
+    name: kubeadm
+    disable_excludes: "kubernetes"
+
+- name: starting docker services
+  service:
+          name: docker
+          state: "started"
+          enabled: yes
+- name: installing iproute-tc
+  package:
+    name: "iproute-tc"
+    state: present
+
+- name: starting kubelet services
+  service:
+          name: kubelet
+          state: "started"
+          enabled: yes
+
+- name: pulling all images
+  shell: kubeadm config images pull
+          
+- name: copying content of the daemon.json file
+  copy:
+    dest: /etc/docker/daemon.json
+    src:  daemon.json
+
+- name: restarting docker services
+  service:
+    name: docker
+    state: "restarted"
+
+- name: copying kubernetes conf file
+  copy:
+    dest: /etc/sysctl.d/kubernetes.conf
+    src: kubernetes.conf
+
+- name: refreshing sysctl
+  shell: "sysctl --system"
+
+- name: initializing  kubeadm service
+  shell: "kubeadm init --pod-network-cidr=10.244.0.0/16  --ignore-preflight-errors=NumCPU --ignore-preflight-errors=Mem"
+  ignore_errors: yes
+- name: Creating the .kube directory in $home/
+  file:
+    name: "$HOME/.kube"
+    state: directory
+
+- name: Copying admin.conf in location HOME/.kube/config
+  command: "cp -i /etc/kubernetes/admin.conf $HOME/.kube/config"
+  ignore_errors: yes
+
+- name: owner command
+  shell: "chown $(id -u):$(id -g) $HOME/.kube/config"
+
+- name: Installing flannel
+  shell: "kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml"
+
+
+
+
